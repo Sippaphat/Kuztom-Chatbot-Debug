@@ -6,17 +6,35 @@ const agents = [
   { name: "Classifier_Agent", icon: <AiOutlineUser /> },
   { name: "Repond_Agent", icon: <AiOutlineUser /> },
   { name: "Repond_Extract_Agent", icon: <AiOutlineUser /> },
+  { name: "Image_Agent", icon: <AiOutlineUser /> },
+  { name: "Query_Maker_Agent", icon: <AiOutlineUser /> },
+  { name: "Rag_Agent", icon: <AiOutlineUser /> },
+  { name: "RS_Agent", icon: <AiOutlineUser /> },
+  { name: "Final_Repond_Agent", icon: <AiOutlineUser /> },
+  { name: "Final_Repond_Extract_Agent", icon: <AiOutlineUser /> },
+  { name: "Final_Convsum_Agent", icon: <AiOutlineUser /> },
 ];
 
+const shops = {
+  "P'Neung": "95ba4d0d-c5ac-43fc-acf8-a2ba4d5aef3b",
+  "Aj'Pooh": "3833993e-2bcd-41e6-af1b-b8d115aafae0",
+  "Flight": "88f887a0-8ea2-4a53-9ea2-73846c704934"
+};
+
+const initialUserIds = ["pluemtest", "user1", "user2"]; // Add your user IDs here
 
 export default function AppLayout({ contacts, conversation = mockConversation, onSend }) {
-  const [conversationHistory, setConversationHistory] = useState(conversation);
-  const [filteredConversation, setFilteredConversation] = useState(conversation);
+  const [conversationHistory, setConversationHistory] = useState({});
+  const [filteredConversation, setFilteredConversation] = useState([]);
   const [currentView, setCurrentView] = useState("chatHistory");
 
   const [messageInput, setMessageInput] = useState("");
   const [selectedImage, setSelectedImage] = useState("None");
   const [agentThoughts, setAgentThoughts] = useState({});
+  const [selectedShop, setSelectedShop] = useState(Object.keys(shops)[0]);
+  const [selectedUserId, setSelectedUserId] = useState(initialUserIds[0]); // Add state for selected user ID
+  const [userIds, setUserIds] = useState(initialUserIds); // State for user IDs
+  const [newUserId, setNewUserId] = useState(""); // State for new user ID input
 
   const maxVisibleAgents = 5;
   const visibleAgents = agents.slice(0, maxVisibleAgents);
@@ -25,13 +43,23 @@ export default function AppLayout({ contacts, conversation = mockConversation, o
   function appendAgentThoughts(debugLog) {
     setAgentThoughts((prevThoughts) => {
       let updatedThoughts = { ...prevThoughts };
-  
+      const shopId = selectedShop;
+      const userId = selectedUserId;
+
+      if (!updatedThoughts[shopId]) {
+        updatedThoughts[shopId] = {};
+      }
+
+      if (!updatedThoughts[shopId][userId]) {
+        updatedThoughts[shopId][userId] = {};
+      }
+
       for (let key in debugLog) {
         if (key.endsWith("_Agent")) {
-          if (!updatedThoughts[key]) {
-            updatedThoughts[key] = []; // Initialize as an array if not present
+          if (!updatedThoughts[shopId][userId][key]) {
+            updatedThoughts[shopId][userId][key] = []; // Initialize as an array if not present
           }
-  
+
           let responseText;
           if (typeof debugLog[key] === "string") {
             responseText = debugLog[key];
@@ -40,9 +68,9 @@ export default function AppLayout({ contacts, conversation = mockConversation, o
           } else {
             responseText = debugLog[key];
           }
-  
-          updatedThoughts[key] = [
-            ...updatedThoughts[key],
+
+          updatedThoughts[shopId][userId][key] = [
+            ...updatedThoughts[shopId][userId][key],
             { input: debugLog["user_input"], response: responseText },
           ];
         }
@@ -50,22 +78,27 @@ export default function AppLayout({ contacts, conversation = mockConversation, o
       return updatedThoughts;
     });
   }
-  
 
   const handleChatHistoryClick = () => {
     setCurrentView("chatHistory");
-    setFilteredConversation(conversationHistory);
+    setFilteredConversation(conversationHistory[selectedShop]?.[selectedUserId] || []);
   };
 
   const handleSendMessage = async () => {
     if (!messageInput.trim()) return;
 
-    const shopId = "88f887a0-8ea2-4a53-9ea2-73846c704934";
-    const userId = "user456";
+    const shopId = shops[selectedShop];
+    const userId = selectedUserId;
 
     const newMessage = { sender: "User", text: messageInput };
-    const newHistory = [...conversationHistory, newMessage];
-    setConversationHistory(newHistory);
+    const newHistory = [...(conversationHistory[shopId]?.[userId] || []), newMessage];
+    setConversationHistory((prevHistory) => ({
+      ...prevHistory,
+      [shopId]: {
+        ...prevHistory[shopId],
+        [userId]: newHistory,
+      },
+    }));
     if (currentView === "chatHistory") {
       setFilteredConversation(newHistory);
     }
@@ -88,7 +121,13 @@ export default function AppLayout({ contacts, conversation = mockConversation, o
       const botReply = result.Final_output || "No response received";
       const botMessage = { sender: "Bot", text: botReply };
       const updatedHistory = [...newHistory, botMessage];
-      setConversationHistory(updatedHistory);
+      setConversationHistory((prevHistory) => ({
+        ...prevHistory,
+        [shopId]: {
+          ...prevHistory[shopId],
+          [userId]: updatedHistory,
+        },
+      }));
       if (currentView === "chatHistory") {
         setFilteredConversation(updatedHistory);
       }
@@ -96,7 +135,13 @@ export default function AppLayout({ contacts, conversation = mockConversation, o
       console.error("Error sending message:", error);
       const errorMsg = { sender: "Bot", text: "Error sending message." };
       const updatedHistory = [...newHistory, errorMsg];
-      setConversationHistory(updatedHistory);
+      setConversationHistory((prevHistory) => ({
+        ...prevHistory,
+        [shopId]: {
+          ...prevHistory[shopId],
+          [userId]: updatedHistory,
+        },
+      }));
       if (currentView === "chatHistory") {
         setFilteredConversation(updatedHistory);
       }
@@ -104,10 +149,10 @@ export default function AppLayout({ contacts, conversation = mockConversation, o
     setMessageInput("");
     setSelectedImage("None");
   };
-  
+
   const handleAgentClick = (agentName) => {
     setCurrentView(agentName);
-    setFilteredConversation(agentThoughts[agentName] || []);
+    setFilteredConversation(agentThoughts[selectedShop]?.[selectedUserId]?.[agentName] || []);
   };
 
   const handleImageChange = (e) => {
@@ -118,11 +163,31 @@ export default function AppLayout({ contacts, conversation = mockConversation, o
     }
   };
 
+  const handleAddUserId = () => {
+    if (newUserId.trim() && !userIds.includes(newUserId)) {
+      setUserIds([...userIds, newUserId]);
+      setSelectedUserId(newUserId);
+      setNewUserId("");
+    }
+  };
+
+  const handleUserIdChange = (e) => {
+    const newUserId = e.target.value;
+    setSelectedUserId(newUserId);
+    setFilteredConversation(conversationHistory[selectedShop]?.[newUserId] || []);
+  };
+
+  const handleShopChange = (e) => {
+    const newShopId = e.target.value;
+    setSelectedShop(newShopId);
+    setFilteredConversation(conversationHistory[newShopId]?.[selectedUserId] || []);
+  };
+
   return (
     <div className="msn-window">
       {/* Title Bar */}
       <div className="title-bar flex items-center justify-between px-4 py-1">
-        <span className="title-text font-bold text-white">mc - Conversation</span>
+        <span className="title-text font-bold text-white">SellerSideKicks - Conversation</span>
         <div className="window-controls flex space-x-2">
           <button className="control-button minimize"></button>
           <button className="control-button maximize"></button>
@@ -182,10 +247,11 @@ export default function AppLayout({ contacts, conversation = mockConversation, o
                   {currentView === "chatHistory"
                     ? filteredConversation.map((msg, index) => (
                         <div key={index} className="chat-message">
-                          <span className={`message-sender ${msg.sender === "User" ? "user" : "agent"}`}>
-                            {msg.sender} says:
+                          <span
+                            className={`message-sender ${msg.sender === "User" ? "user" : "agent"}`}>
+                            {msg.sender === "User" ? selectedUserId : selectedShop} says:
                           </span>
-                          <span className={`message-text`}>{msg.text}</span>
+                          <span className={`message-text`} style={{ color: msg.sender === "User" ? "black" : "green" }}> {msg.text} </span>
                         </div>
                       ))
                     : filteredConversation.map((msg, index) => (
@@ -213,6 +279,54 @@ export default function AppLayout({ contacts, conversation = mockConversation, o
 
             {/* Bottom Section */}
             <div className="bottom-section">
+              {/* Shop Selection */}
+              <div className="shop-selection-container">
+                <label htmlFor="shopSelect" className="shop-select-label">
+                  Shop:
+                </label>
+                <select
+                  id="shopSelect"
+                  className="shop-select"
+                  value={selectedShop}
+                  onChange={handleShopChange}
+                >
+                  {Object.keys(shops).map((shopName, index) => (
+                    <option key={index} value={shopName}>
+                      {shopName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {/* User ID Selection */}
+              <div className="user-id-selection-container">
+                <label htmlFor="userIdSelect" className="user-id-select-label">
+                  User ID:
+                </label>
+                <select
+                  id="userIdSelect"
+                  className="user-id-select"
+                  value={selectedUserId}
+                  onChange={handleUserIdChange}
+                >
+                  {userIds.map((userId, index) => (
+                    <option key={index} value={userId}>
+                      {userId}
+                    </option>
+                  ))}
+                </select>
+                <div className="new-user-id-container">
+                  <input
+                    type="text"
+                    className="new-user-id-input"
+                    placeholder="New User ID"
+                    value={newUserId}
+                    onChange={(e) => setNewUserId(e.target.value)}
+                  />
+                  <button className="add-user-id-button" onClick={handleAddUserId}>
+                    Add
+                  </button>
+                </div>
+              </div>
               {/* Message Input */}
               <div className="message-input-container">
                 <textarea
